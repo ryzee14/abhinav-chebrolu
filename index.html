@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Driving Game</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #333;
+        }
+        #gameArea {
+            width: 400px;
+            height: 600px;
+            background: #222;
+            position: relative;
+            margin: auto;
+            border: 2px solid white;
+            overflow: hidden;
+        }
+        .car {
+            width: 50px;
+            height: 100px;
+            position: absolute;
+            bottom: 20px;
+            left: 175px;
+            background: red;
+            border-radius: 10px;
+        }
+        .wheel {
+            width: 15px;
+            height: 15px;
+            background: black;
+            position: absolute;
+            border-radius: 50%;
+        }
+        .wheel.front-left { top: 5px; left: 5px; }
+        .wheel.front-right { top: 5px; right: 5px; }
+        .wheel.back-left { bottom: 5px; left: 5px; }
+        .wheel.back-right { bottom: 5px; right: 5px; }
+        .obstacle {
+            width: 50px;
+            height: 100px;
+            background: blue;
+            position: absolute;
+            top: -100px;
+        }
+        #notification {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: none;
+        }
+        #score {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 24px;
+            color: white;
+            z-index: 10;
+        }
+        #resetButton {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background: rgba(0, 255, 0, 0.7);
+            color: white;
+            border: none;
+            cursor: pointer;
+            z-index: 20;
+        }
+        #difficulty {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background: rgba(255, 255, 0, 0.7);
+            color: black;
+            border: none;
+            cursor: pointer;
+            z-index: 20;
+        }
+        #mobileControls {
+            position: fixed;
+            bottom: 10px;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+        }
+        .mobileButton {
+            width: 80px;
+            height: 80px;
+            background: rgba(255, 255, 255, 0.6);
+            color: black;
+            font-size: 24px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameArea">
+        <div class="car" id="playerCar">
+            <div class="wheel front-left"></div>
+            <div class="wheel front-right"></div>
+            <div class="wheel back-left"></div>
+            <div class="wheel back-right"></div>
+        </div>
+        <div id="notification">Collision! Game Reset.</div>
+        <div id="score">Score: 0</div>
+        <button id="resetButton">Reset Game</button>
+        <button id="difficulty">Change Difficulty</button>
+    </div>
+
+    <!-- Mobile Controls -->
+    <div id="mobileControls">
+        <button class="mobileButton" id="moveLeft">←</button>
+        <button class="mobileButton" id="moveRight">→</button>
+    </div>
+
+    <script>
+        const gameArea = document.getElementById("gameArea");
+        const playerCar = document.getElementById("playerCar");
+        const notification = document.getElementById("notification");
+        const scoreDisplay = document.getElementById("score");
+        const resetButton = document.getElementById("resetButton");
+        const difficultyButton = document.getElementById("difficulty");
+
+        let carPosition = 175;
+        let score = 0;
+        const gameWidth = 400;
+        const carWidth = 50;
+        const carHeight = 100;
+
+        let obstacleInterval;
+        let moveIntervals = [];
+
+        let difficultyLevel = 1;
+        let spawnFrequency = 2000;
+        let obstacleSpeed = 5;
+
+        let isMovingLeft = false;
+        let isMovingRight = false;
+        const movementSpeed = 3;
+
+        // Retrieve score from localStorage
+        if (localStorage.getItem("score")) {
+            score = parseInt(localStorage.getItem("score"));
+        }
+
+        scoreDisplay.textContent = `Score: ${score}`;
+
+        // Adjust difficulty
+        function adjustDifficulty(level) {
+            switch (level) {
+                case 1:
+                    spawnFrequency = 2000;
+                    obstacleSpeed = 5;
+                    break;
+                case 2:
+                    spawnFrequency = 1500;
+                    obstacleSpeed = 7;
+                    break;
+                case 3:
+                    spawnFrequency = 1000;
+                    obstacleSpeed = 10;
+                    break;
+            }
+            resetGame();
+        }
+
+        // Mobile controls: Move the car smoothly
+        function moveCar() {
+            if (isMovingLeft && carPosition > 0) {
+                carPosition -= movementSpeed;
+            }
+            if (isMovingRight && carPosition < gameWidth - carWidth) {
+                carPosition += movementSpeed;
+            }
+            playerCar.style.left = carPosition + "px";
+
+            // Request next frame for smooth movement
+            requestAnimationFrame(moveCar);
+        }
+
+        // Start movement loop
+        moveCar();
+
+        // Reset game
+        function resetGame() {
+            playerCar.style.left = "175px";
+            carPosition = 175;
+
+            document.querySelectorAll(".obstacle").forEach(obstacle => obstacle.remove());
+            moveIntervals.forEach(interval => clearInterval(interval));
+            moveIntervals = [];
+
+            if (obstacleInterval) {
+                clearInterval(obstacleInterval);
+            }
+
+            obstacleInterval = setInterval(createObstacle, spawnFrequency);
+
+            notification.style.display = "block";
+            setTimeout(() => {
+                notification.style.display = "none";
+            }, 1000);
+        }
+
+        // Create obstacles
+        function createObstacle() {
+            const obstacle = document.createElement("div");
+            obstacle.classList.add("obstacle");
+            obstacle.style.left = Math.floor(Math.random() * (gameWidth - carWidth)) + "px";
+            obstacle.style.top = "-100px";
+            gameArea.appendChild(obstacle);
+
+            const moveInterval = setInterval(() => {
+                let obstacleTop = parseInt(obstacle.style.top);
+                obstacle.style.top = obstacleTop + obstacleSpeed + "px";
+
+                let playerLeft = parseInt(playerCar.style.left);
+                let obstacleLeft = parseInt(obstacle.style.left);
+
+                if (obstacleTop >= 500 && obstacleTop <= 600 &&
+                    obstacleLeft + carWidth > playerLeft && obstacleLeft < playerLeft + carWidth) {
+                    resetGame();
+                    obstacle.remove();
+                    clearInterval(moveInterval);
+                }
+
+                if (obstacleTop >= 600) {
+                    score++;
+                    scoreDisplay.textContent = `Score: ${score}`;
+                    localStorage.setItem("score", score);
+                    obstacle.remove();
+                    clearInterval(moveInterval);
+                }
+            }, 50);
+
+            moveIntervals.push(moveInterval);
+        }
+
+        // Start generating obstacles
+        obstacleInterval = setInterval(createObstacle, spawnFrequency);
+
+        // Reset game button
+        resetButton.addEventListener("click", function() {
+            resetGame();
+        });
+
+        // Change difficulty button
+        difficultyButton.addEventListener("click", function() {
+            difficultyLevel = (difficultyLevel % 3) + 1;
+            adjustDifficulty(difficultyLevel);
+            difficultyButton.textContent = `Difficulty: ${['Easy', 'Medium', 'Hard'][difficultyLevel - 1]}`;
+        });
+
+        // Mobile controls: Move car left or right when buttons are pressed
+        document.getElementById("moveLeft").addEventListener("click", function() {
+            isMovingLeft = true;
+        });
+
+        document.getElementById("moveRight").addEventListener("click", function() {
+            isMovingRight = true;
+        });
+
+        // Stop car movement when buttons are released (using touchend and click)
+        document.getElementById("moveLeft").addEventListener("touchend", function() {
+            isMovingLeft = false;
+        });
+
+        document.getElementById("moveRight").addEventListener("touchend", function() {
+            isMovingRight = false;
+        });
+
+        // Prevent issues with long presses on mobile buttons
+        document.getElementById("moveLeft").addEventListener("click", function() {
+            setTimeout(() => isMovingLeft = false, 0);
+        });
+
+        document.getElementById("moveRight").addEventListener("click", function() {
+            setTimeout(() => isMovingRight = false, 0);
+        });
+
+    </script>
+</body>
+</html>
